@@ -49,12 +49,12 @@ function ViewController({
 const DRAG_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const DRAG_INTERSECT = new THREE.Vector3();
 
-function LoadedModel({ url }: { url: string }) {
+function LoadedModel({ url, objectRef }: { url: string; objectRef?: React.RefObject<THREE.Object3D | null> }) {
   const { scene } = useGLTF(url);
-  return <primitive object={scene} />;
+  return <primitive ref={objectRef} object={scene} />;
 }
 
-function LoadedSTL({ url }: { url: string }) {
+function LoadedSTL({ url, objectRef }: { url: string; objectRef?: React.RefObject<THREE.Object3D | null> }) {
   const originalGeometry = useLoader(STLLoader, url);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -96,16 +96,22 @@ function LoadedSTL({ url }: { url: string }) {
   }, [originalGeometry, camera]);
 
   return (
-    <mesh ref={meshRef} geometry={geometryRef.current || originalGeometry}>
+    <mesh
+      ref={(el) => {
+        (meshRef as React.MutableRefObject<THREE.Mesh | null>).current = el;
+        if (objectRef) (objectRef as React.MutableRefObject<THREE.Object3D | null>).current = el;
+      }}
+      geometry={geometryRef.current || originalGeometry}
+    >
       <meshStandardMaterial color="#888" />
     </mesh>
   );
 }
 
-function LoadedImage({ url }: { url: string }) {
+function LoadedImage({ url, objectRef }: { url: string; objectRef?: React.RefObject<THREE.Object3D | null> }) {
   const texture = useTexture(url);
   return (
-    <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+    <mesh ref={objectRef} position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[4, 4]} />
       <meshBasicMaterial map={texture} toneMapped={false} />
     </mesh>
@@ -196,6 +202,7 @@ function PointSphere({
     <mesh
       ref={meshRef}
       position={[point.x, point.y, point.z]}
+      userData={{ isPointSphere: true }}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -221,43 +228,72 @@ function PointSphere({
 
 const CLICK_MOVE_THRESHOLD_PX = 6;
 
-function AddPointPlane({ onAdd }: { onAdd: (point: THREE.Vector3) => void }) {
-  const planeRef = useRef<THREE.Mesh>(null);
+/** 추가 모드: 클릭 시 레이캐스트로 3D 객체 표면(또는 바닥 평면)에 점 추가 */
+function AddPointRaycast({
+  mode,
+  onAdd,
+  sceneRootRef,
+}: {
+  mode: LabelingMode;
+  onAdd: (point: THREE.Vector3) => void;
+  sceneRootRef: React.RefObject<THREE.Group | null>;
+}) {
+  const { camera, gl } = useThree();
+  const raycaster = useRef(new THREE.Raycaster());
+  const pointer = useRef(new THREE.Vector2());
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+  const fallbackPlane = useRef<THREE.Mesh>(null);
 
-  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation();
-    const { clientX: x, clientY: y } = e.nativeEvent;
-    pointerDownRef.current = { x, y };
-  }, []);
+  useEffect(() => {
+    if (mode !== 'add') return;
+    const el = gl.domElement;
 
-  const handleClick = useCallback(
-    (e: ThreeEvent<MouseEvent>) => {
-      e.stopPropagation();
+    const toNDC = (clientX: number, clientY: number) => {
+      const rect = el.getBoundingClientRect();
+      pointer.current.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.current.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDownRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
       const down = pointerDownRef.current;
       pointerDownRef.current = null;
       if (!down) return;
-      const { clientX: x, clientY: y } = e.nativeEvent;
-      const dx = x - down.x;
-      const dy = y - down.y;
-      if (dx * dx + dy * dy > CLICK_MOVE_THRESHOLD_PX * CLICK_MOVE_THRESHOLD_PX) {
-        return; // 움직였으면 점 찍지 않음
-      }
-      const point = e.point.clone();
-      onAdd(point);
-    },
-    [onAdd]
-  );
+      const dx = e.clientX - down.x;
+      const dy = e.clientY - down.y;
+      if (dx * dx + dy * dy > CLICK_MOVE_THRESHOLD_PX * CLICK_MOVE_THRESHOLD_PX) return;
+
+      toNDC(e.clientX, e.clientY);
+      raycaster.current.setFromCamera(pointer.current, camera);
+
+      const targets: THREE.Object3D[] = [];
+      if (sceneRootRef.current) targets.push(sceneRootRef.current);
+      if (fallbackPlane.current) targets.push(fallbackPlane.current);
+
+      const intersects = raycaster.current.intersectObjects(targets, true);
+      const first = intersects[0];
+      if (!first?.point) return;
+      if ((first.object as THREE.Object3D & { userData?: { isPointSphere?: boolean } }).userData?.isPointSphere) return;
+      onAdd(first.point.clone());
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointerup', onPointerUp);
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointerup', onPointerUp);
+    };
+  }, [mode, camera, gl, onAdd, sceneRootRef]);
 
   return (
     <mesh
-      ref={planeRef}
+      ref={fallbackPlane}
       position={[0, 0, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
-      onPointerDown={handlePointerDown}
-      onClick={handleClick}
       visible={false}
-      receiveShadow
     >
       <planeGeometry args={[20, 20]} />
       <meshBasicMaterial transparent opacity={0} />
@@ -279,6 +315,8 @@ export function Scene3D({
   onViewActionConsumed,
 }: Scene3DProps) {
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
+  const hitTargetRef = useRef<THREE.Object3D | null>(null);
+  const sceneRootRef = useRef<THREE.Group | null>(null);
 
   const handleAdd = useCallback(
     (v: THREE.Vector3) => {
@@ -307,19 +345,17 @@ export function Scene3D({
       <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
       <directionalLight position={[-5, 5, -5]} intensity={0.3} />
 
-      {/* Loaded 3D model or image */}
-      {modelType === 'gltf' && <LoadedModel url={modelUrl} />}
-      {modelType === 'stl' && <LoadedSTL url={modelUrl} />}
-      {modelType === 'image' && <LoadedImage url={modelUrl} />}
+      <group ref={sceneRootRef}>
+        {/* Loaded 3D model or image (클릭 시 이 표면에 점 추가) */}
+        {modelType === 'gltf' && <LoadedModel url={modelUrl} objectRef={hitTargetRef} />}
+        {modelType === 'stl' && <LoadedSTL url={modelUrl} objectRef={hitTargetRef} />}
+        {modelType === 'image' && <LoadedImage url={modelUrl} objectRef={hitTargetRef} />}
 
-      {/* Grid floor (raycast disabled so add-plane receives clicks in add mode) */}
-      <gridHelper args={[10, 10, '#444', '#222']} position={[0, 0, 0]} raycast={() => null} />
+        {/* Grid floor */}
+        <gridHelper args={[10, 10, '#444', '#222']} position={[0, 0, 0]} raycast={() => null} />
 
-      {/* Invisible plane for adding points (click on empty space) */}
-      {mode === 'add' && <AddPointPlane onAdd={handleAdd} />}
-
-      {/* Point spheres */}
-      {points.map((point) => (
+        {/* Point spheres */}
+        {points.map((point) => (
         <PointSphere
           key={point.id}
           point={point}
@@ -340,6 +376,10 @@ export function Scene3D({
           onDragEnd={() => setIsDraggingPoint(false)}
         />
       ))}
+      </group>
+
+      {/* 추가 모드: 레이캐스트로 3D 객체 표면 또는 바닥 평면에 점 추가 */}
+      {mode === 'add' && <AddPointRaycast mode={mode} onAdd={handleAdd} sceneRootRef={sceneRootRef} />}
     </>
   );
 }
