@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Scene3D, getNextColor } from './Scene3D';
 import { Toolbar } from './Toolbar';
 import { PointList } from './PointList';
+import { FilePicker, type FileModelType } from './FilePicker';
 import './FeaturePointLabeling.css';
 import type { FeaturePoint, LabelingMode } from '../../types/featurePoint';
 
@@ -10,11 +11,39 @@ function generateId(): string {
   return `pt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export type ModelType = FileModelType;
+
 export function FeaturePointLabeling() {
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [modelType, setModelType] = useState<ModelType | null>(null);
   const [points, setPoints] = useState<FeaturePoint[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<LabelingMode>('add');
   const [viewAction, setViewAction] = useState<'zoomIn' | 'zoomOut' | 'reset' | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (modelUrl) URL.revokeObjectURL(modelUrl);
+    };
+  }, [modelUrl]);
+
+  const handleFileSelect = useCallback((_file: File, url: string, type: FileModelType) => {
+    setModelUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    setModelType(type);
+    setPoints([]);
+    setSelectedId(null);
+  }, []);
+
+  const handleChangeFile = useCallback(() => {
+    if (modelUrl) URL.revokeObjectURL(modelUrl);
+    setModelUrl(null);
+    setModelType(null);
+    setPoints([]);
+    setSelectedId(null);
+  }, [modelUrl]);
 
   const handleAddPoint = useCallback((position: { x: number; y: number; z: number }) => {
     const newPoint: FeaturePoint = {
@@ -49,6 +78,14 @@ export function FeaturePointLabeling() {
   const handleZoomOut = useCallback(() => setViewAction('zoomOut'), []);
   const handleReset = useCallback(() => setViewAction('reset'), []);
 
+  if (!modelUrl || !modelType) {
+    return (
+      <div className="feature-point-labeling">
+        <FilePicker onFileSelect={handleFileSelect} />
+      </div>
+    );
+  }
+
   return (
     <div className="feature-point-labeling">
       <Toolbar
@@ -57,6 +94,7 @@ export function FeaturePointLabeling() {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onReset={handleReset}
+        onChangeFile={handleChangeFile}
       />
       <div className="labeling-layout">
         <div className="canvas-container">
@@ -65,17 +103,21 @@ export function FeaturePointLabeling() {
             gl={{ antialias: true }}
             shadows
           >
-            <Scene3D
-              points={points}
-              selectedId={selectedId}
-              mode={mode}
-              onAddPoint={handleAddPoint}
-              onSelectPoint={handleSelectPoint}
-              onUpdatePoint={handleUpdatePoint}
-              onDeletePoint={handleDeletePoint}
-              viewAction={viewAction}
-              onViewActionConsumed={() => setViewAction(null)}
-            />
+            <Suspense fallback={null}>
+              <Scene3D
+                modelUrl={modelUrl}
+                modelType={modelType}
+                points={points}
+                selectedId={selectedId}
+                mode={mode}
+                onAddPoint={handleAddPoint}
+                onSelectPoint={handleSelectPoint}
+                onUpdatePoint={handleUpdatePoint}
+                onDeletePoint={handleDeletePoint}
+                viewAction={viewAction}
+                onViewActionConsumed={() => setViewAction(null)}
+              />
+            </Suspense>
           </Canvas>
         </div>
         <PointList

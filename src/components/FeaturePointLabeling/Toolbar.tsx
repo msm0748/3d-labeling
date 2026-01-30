@@ -6,6 +6,7 @@ interface ToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
+  onChangeFile?: () => void;
 }
 
 export function Toolbar({
@@ -14,9 +15,20 @@ export function Toolbar({
   onZoomIn,
   onZoomOut,
   onReset,
+  onChangeFile,
 }: ToolbarProps) {
   return (
     <div className="toolbar">
+      {onChangeFile && (
+        <>
+          <div className="toolbar-section">
+            <button type="button" onClick={onChangeFile} title="다른 파일 선택">
+              📁 파일 변경
+            </button>
+          </div>
+          <div className="toolbar-divider" />
+        </>
+      )}
       <div className="toolbar-section">
         <span className="toolbar-label">뷰</span>
         <button type="button" onClick={onZoomIn} title="확대">

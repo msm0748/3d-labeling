@@ -1,11 +1,16 @@
-import { useRef, useCallback, useState } from 'react';
-import { useThree } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { useRef, useCallback, useState, useEffect } from 'react';
+import { useThree, useLoader } from '@react-three/fiber';
+import { OrbitControls, useGLTF, useTexture } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import type { FeaturePoint, LabelingMode } from '../../types/featurePoint';
 
+type ModelType = 'gltf' | 'stl' | 'image';
+
 interface Scene3DProps {
+  modelUrl: string;
+  modelType: ModelType;
   points: FeaturePoint[];
   selectedId: string | null;
   mode: LabelingMode;
@@ -43,6 +48,69 @@ function ViewController({
 
 const DRAG_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const DRAG_INTERSECT = new THREE.Vector3();
+
+function LoadedModel({ url }: { url: string }) {
+  const { scene } = useGLTF(url);
+  return <primitive object={scene} />;
+}
+
+function LoadedSTL({ url }: { url: string }) {
+  const originalGeometry = useLoader(STLLoader, url);
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
+
+  useEffect(() => {
+    if (!originalGeometry || !meshRef.current) return;
+
+    // geometry clone (원본을 수정하지 않기 위해)
+    if (!geometryRef.current) {
+      geometryRef.current = originalGeometry.clone();
+    }
+    const geometry = geometryRef.current;
+
+    // 바운딩 박스 계산
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    if (!box) return;
+
+    // 중심 계산
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+
+    // 중심을 원점으로 이동
+    geometry.translate(-center.x, -center.y, -center.z);
+
+    // 적절한 크기로 스케일 (최대 크기가 3이 되도록)
+    const scale = maxDim > 0 ? 3 / maxDim : 1;
+    meshRef.current.scale.set(scale, scale, scale);
+
+    // 카메라 위치 조정
+    const distance = 5;
+    camera.position.set(distance, distance, distance);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }, [originalGeometry, camera]);
+
+  return (
+    <mesh ref={meshRef} geometry={geometryRef.current || originalGeometry}>
+      <meshStandardMaterial color="#888" />
+    </mesh>
+  );
+}
+
+function LoadedImage({ url }: { url: string }) {
+  const texture = useTexture(url);
+  return (
+    <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[4, 4]} />
+      <meshBasicMaterial map={texture} toneMapped={false} />
+    </mesh>
+  );
+}
 
 function PointSphere({
   point,
@@ -198,6 +266,8 @@ function AddPointPlane({ onAdd }: { onAdd: (point: THREE.Vector3) => void }) {
 }
 
 export function Scene3D({
+  modelUrl,
+  modelType,
   points,
   selectedId,
   mode,
@@ -236,6 +306,11 @@ export function Scene3D({
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
       <directionalLight position={[-5, 5, -5]} intensity={0.3} />
+
+      {/* Loaded 3D model or image */}
+      {modelType === 'gltf' && <LoadedModel url={modelUrl} />}
+      {modelType === 'stl' && <LoadedSTL url={modelUrl} />}
+      {modelType === 'image' && <LoadedImage url={modelUrl} />}
 
       {/* Grid floor (raycast disabled so add-plane receives clicks in add mode) */}
       <gridHelper args={[10, 10, '#444', '#222']} position={[0, 0, 0]} raycast={() => null} />
