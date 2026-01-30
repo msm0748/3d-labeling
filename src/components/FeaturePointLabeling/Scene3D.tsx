@@ -126,6 +126,8 @@ function PointSphere({
   onPositionChange,
   onDragStart,
   onDragEnd,
+  dragHitTargetRef,
+  dragFallbackPlaneRef,
 }: {
   point: FeaturePoint;
   isSelected: boolean;
@@ -134,6 +136,8 @@ function PointSphere({
   onPositionChange?: (id: string, x: number, y: number, z: number) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  dragHitTargetRef?: React.RefObject<THREE.Group | null>;
+  dragFallbackPlaneRef?: React.RefObject<THREE.Mesh | null>;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const isDraggingRef = useRef(false);
@@ -148,13 +152,13 @@ function PointSphere({
       e.stopPropagation();
       didDragRef.current = false;
       if (mode === 'select' && isSelected && onPositionChange) {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        gl.domElement.setPointerCapture(e.pointerId);
         isDraggingRef.current = true;
         document.body.style.cursor = 'grabbing';
         onDragStart?.();
       }
     },
-    [mode, isSelected, onPositionChange, onDragStart]
+    [mode, isSelected, onPositionChange, onDragStart, gl]
   );
 
   const handlePointerMove = useCallback(
@@ -166,23 +170,36 @@ function PointSphere({
       pointer.current.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       pointer.current.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.current.setFromCamera(pointer.current, camera);
-      if (raycaster.current.ray.intersectPlane(DRAG_PLANE, DRAG_INTERSECT)) {
+
+      const targets: THREE.Object3D[] = [];
+      if (dragHitTargetRef?.current) targets.push(dragHitTargetRef.current);
+      if (dragFallbackPlaneRef?.current) targets.push(dragFallbackPlaneRef.current);
+
+      if (targets.length === 0) {
+        raycaster.current.ray.intersectPlane(DRAG_PLANE, DRAG_INTERSECT);
         onPositionChange(point.id, DRAG_INTERSECT.x, DRAG_INTERSECT.y, DRAG_INTERSECT.z);
+        return;
+      }
+
+      const intersects = raycaster.current.intersectObjects(targets, true);
+      const hit = intersects.find((i) => !(i.object as THREE.Object3D & { userData?: { isPointSphere?: boolean } }).userData?.isPointSphere);
+      if (hit?.point) {
+        onPositionChange(point.id, hit.point.x, hit.point.y, hit.point.z);
       }
     },
-    [camera, gl, point.id, onPositionChange]
+    [camera, gl, point.id, onPositionChange, dragHitTargetRef, dragFallbackPlaneRef]
   );
 
   const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
       if (isDraggingRef.current) {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        gl.domElement.releasePointerCapture(e.pointerId);
         isDraggingRef.current = false;
         document.body.style.cursor = 'default';
         onDragEnd?.();
       }
     },
-    [onDragEnd]
+    [onDragEnd, gl]
   );
 
   const handleClick = useCallback(
@@ -233,16 +250,17 @@ function AddPointRaycast({
   mode,
   onAdd,
   sceneRootRef,
+  fallbackPlaneRef,
 }: {
   mode: LabelingMode;
   onAdd: (point: THREE.Vector3) => void;
   sceneRootRef: React.RefObject<THREE.Group | null>;
+  fallbackPlaneRef: React.RefObject<THREE.Mesh | null>;
 }) {
   const { camera, gl } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const pointer = useRef(new THREE.Vector2());
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
-  const fallbackPlane = useRef<THREE.Mesh>(null);
 
   useEffect(() => {
     if (mode !== 'add') return;
@@ -271,7 +289,7 @@ function AddPointRaycast({
 
       const targets: THREE.Object3D[] = [];
       if (sceneRootRef.current) targets.push(sceneRootRef.current);
-      if (fallbackPlane.current) targets.push(fallbackPlane.current);
+      if (fallbackPlaneRef.current) targets.push(fallbackPlaneRef.current);
 
       const intersects = raycaster.current.intersectObjects(targets, true);
       const first = intersects[0];
@@ -286,11 +304,11 @@ function AddPointRaycast({
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointerup', onPointerUp);
     };
-  }, [mode, camera, gl, onAdd, sceneRootRef]);
+  }, [mode, camera, gl, onAdd, sceneRootRef, fallbackPlaneRef]);
 
   return (
     <mesh
-      ref={fallbackPlane}
+      ref={fallbackPlaneRef}
       position={[0, 0, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
       visible={false}
@@ -317,6 +335,7 @@ export function Scene3D({
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
   const hitTargetRef = useRef<THREE.Object3D | null>(null);
   const sceneRootRef = useRef<THREE.Group | null>(null);
+  const fallbackPlaneRef = useRef<THREE.Mesh | null>(null);
 
   const handleAdd = useCallback(
     (v: THREE.Vector3) => {
@@ -374,12 +393,14 @@ export function Scene3D({
           onPositionChange={handlePositionChange}
           onDragStart={() => setIsDraggingPoint(true)}
           onDragEnd={() => setIsDraggingPoint(false)}
+          dragHitTargetRef={sceneRootRef}
+          dragFallbackPlaneRef={fallbackPlaneRef}
         />
       ))}
       </group>
 
       {/* 추가 모드: 레이캐스트로 3D 객체 표면 또는 바닥 평면에 점 추가 */}
-      {mode === 'add' && <AddPointRaycast mode={mode} onAdd={handleAdd} sceneRootRef={sceneRootRef} />}
+      {mode === 'add' && <AddPointRaycast mode={mode} onAdd={handleAdd} sceneRootRef={sceneRootRef} fallbackPlaneRef={fallbackPlaneRef} />}
     </>
   );
 }
