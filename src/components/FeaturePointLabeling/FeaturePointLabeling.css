@@ -1,0 +1,209 @@
+.feature-point-labeling {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1a1b1e;
+  color: #e4e4e7;
+}
+
+.feature-point-labeling .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #25262b;
+  border-bottom: 1px solid #373a40;
+  flex-shrink: 0;
+}
+
+.feature-point-labeling .toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feature-point-labeling .toolbar-divider {
+  width: 1px;
+  height: 1.5rem;
+  background: #373a40;
+  margin: 0 0.5rem;
+}
+
+.feature-point-labeling .toolbar-label {
+  font-size: 0.75rem;
+  color: #868e96;
+  margin-right: 0.25rem;
+}
+
+.feature-point-labeling .toolbar button {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  background: #2c2e33;
+  color: #e4e4e7;
+  border: 1px solid #373a40;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.feature-point-labeling .toolbar button:hover {
+  background: #373a40;
+  border-color: #495057;
+}
+
+.feature-point-labeling .toolbar button.active {
+  background: #4c6ef5;
+  border-color: #4c6ef5;
+  color: #fff;
+}
+
+.labeling-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.canvas-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
+}
+
+.point-list {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #25262b;
+  border-left: 1px solid #373a40;
+  overflow: hidden;
+}
+
+.point-list-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #373a40;
+}
+
+.point-list-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.point-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.point-list-item {
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+  background: #2c2e33;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.point-list-item:hover {
+  background: #34363c;
+}
+
+.point-list-item.selected {
+  border-color: #4c6ef5;
+  background: #2c2e33;
+}
+
+.point-item-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.point-item-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.point-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.point-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-coords {
+  font-size: 0.7rem;
+  color: #868e96;
+  flex-shrink: 0;
+}
+
+.point-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.point-label-input {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  background: #1a1b1e;
+  border: 1px solid #373a40;
+  border-radius: 4px;
+  color: #e4e4e7;
+  min-width: 0;
+}
+
+.point-label-input:focus {
+  outline: none;
+  border-color: #4c6ef5;
+}
+
+.point-delete-btn {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  background: #c92a2a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.point-delete-btn:hover {
+  background: #e03131;
+}
+
+.point-list-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #868e96;
+}
