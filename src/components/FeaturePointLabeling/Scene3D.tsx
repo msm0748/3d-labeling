@@ -1,10 +1,9 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { FeaturePoint, LabelingMode } from '../../types/featurePoint';
-import { POINT_COLORS } from './pointColors';
 
 interface Scene3DProps {
   points: FeaturePoint[];
@@ -18,6 +17,8 @@ interface Scene3DProps {
   onViewActionConsumed: () => void;
 }
 
+const COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#fd79a8', '#a29bfe'];
+
 function ViewController({
   viewAction,
   onConsumed,
@@ -26,18 +27,16 @@ function ViewController({
   onConsumed: () => void;
 }) {
   const controls = useThree((s) => s.controls);
-  const prevActionRef = useRef<string | null>(null);
+  const prevAction = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!viewAction) return;
-    if (viewAction === prevActionRef.current) return;
-    prevActionRef.current = viewAction;
+  if (viewAction && viewAction !== prevAction.current) {
+    prevAction.current = viewAction;
     const c = controls as { zoomIn?: () => void; zoomOut?: () => void; reset?: () => void };
     if (c?.zoomIn && viewAction === 'zoomIn') c.zoomIn();
     if (c?.zoomOut && viewAction === 'zoomOut') c.zoomOut();
     if (c?.reset && viewAction === 'reset') c.reset();
     onConsumed();
-  }, [viewAction, onConsumed, controls]);
+  }
 
   return null;
 }
@@ -75,13 +74,13 @@ function PointSphere({
       e.stopPropagation();
       didDragRef.current = false;
       if (mode === 'select' && isSelected && onPositionChange) {
-        gl.domElement.setPointerCapture(e.pointerId);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
         isDraggingRef.current = true;
         document.body.style.cursor = 'grabbing';
         onDragStart?.();
       }
     },
-    [mode, isSelected, onPositionChange, onDragStart, gl]
+    [mode, isSelected, onPositionChange, onDragStart]
   );
 
   const handlePointerMove = useCallback(
@@ -103,13 +102,13 @@ function PointSphere({
   const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
       if (isDraggingRef.current) {
-        gl.domElement.releasePointerCapture(e.pointerId);
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
         isDraggingRef.current = false;
         document.body.style.cursor = 'default';
         onDragEnd?.();
       }
     },
-    [onDragEnd, gl]
+    [onDragEnd]
   );
 
   const handleClick = useCallback(
